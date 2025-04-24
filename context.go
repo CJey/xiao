@@ -60,6 +60,9 @@ type Context interface {
 	GetFloat(key any) float64
 	GetBool(key any) bool
 
+	// mute/unmute my logger
+	Mute()
+	Unmute()
 	// Logger return my logger
 	Logger() Logger
 	// shortcut methods of my logger
@@ -248,11 +251,15 @@ func (ctx *context) Env() Env {
 	return ctx.env
 }
 
+func (ctx *context) Mute() {
+	ctx.logger.Mute()
+}
+func (ctx *context) Unmute() {
+	ctx.logger.Unmute()
+}
 func (ctx *context) Logger() Logger {
-	if ctx.logger != nil {
-		if l, yes := ctx.logger.(*logger); yes {
-			return l.fork(-1, "", "")
-		}
+	if l, yes := ctx.logger.(*logger); yes {
+		return l.fork(-1, "", "")
 	}
 	return ctx.logger
 }
