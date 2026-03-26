@@ -101,7 +101,7 @@ func RouteSource(target string) (ip net.IP) {
 		var cmd = exec.Command("route", "-nv", "get", target)
 		if out, err := cmd.Output(); err == nil {
 			var hit bool
-			for _, line := range strings.Split(string(out), "\n") {
+			for line := range strings.SplitSeq(string(out), "\n") {
 				var oss = strings.Fields(line)
 				if hit {
 					if src := net.ParseIP(oss[len(oss)-1]); src != nil {
