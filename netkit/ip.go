@@ -1,140 +1,59 @@
 package netkit
 
 import (
-	"bytes"
 	"net"
-	"os/exec"
-	"runtime"
-	"strings"
+	"slices"
+	"sync"
 	"time"
 )
 
-var (
-	_MyManIPLast time.Time
-	_MyManIP     net.IP
-	_MyWanIPLast time.Time
-	_MyWanIP     net.IP
-)
+// 管理网地址一经探得即长期沿用，其余结果(含回落值127.0.0.1)只缓存一个周期，过期重探
+const probeTTL = 3 * time.Second
 
-// MyManIP 返回本机上的管理网络IP地址。
-// 原理上会尝试去查询访问10.0.0.1这个地址时所使用的来源IP，取此IP为管理网络地址。
-// 如果获取失败，或者查询发现使用的IP地址并非私有IP地址，则返回127.0.0.1。
-func MyManIP() (ip net.IP) {
-	const (
-		TARGET = "10.0.0.1"
-	)
+var probed struct {
+	sync.Mutex
+	man, wan         net.IP
+	manLast, wanLast time.Time
+}
 
-	if len(_MyManIP) > 0 && _MyManIP[0] != 127 {
-		ip = make(net.IP, len(_MyManIP))
-		copy(ip, _MyManIP)
-		return
-	}
-
-	if len(_MyManIP) > 0 && time.Since(_MyManIPLast) < 3*time.Second {
-		ip = make(net.IP, len(_MyManIP))
-		copy(ip, _MyManIP)
-		return
-	}
-
-	defer func() {
+// MyManIP 返回本机上的管理网络IP地址，即访问10.0.0.1时选用的源地址。
+// 探测失败或该地址并非私有地址时返回127.0.0.1
+func MyManIP() net.IP {
+	probed.Lock()
+	defer probed.Unlock()
+	if probed.man == nil || (probed.man.IsLoopback() && time.Since(probed.manLast) >= probeTTL) {
+		var ip = RouteSource("10.0.0.1")
 		if ip == nil || !ip.IsPrivate() {
 			ip = net.IPv4(127, 0, 0, 1)
 		}
-		var clone = make(net.IP, len(ip))
-		copy(clone, ip)
-		_MyManIP = clone
-		_MyManIPLast = time.Now()
-	}()
-
-	return RouteSource(TARGET)
+		probed.man, probed.manLast = ip, time.Now()
+	}
+	return slices.Clone(probed.man)
 }
 
-// MyWanIP 返回本机上绑定的公网IP地址。
-// 原理上会尝试去查询访问1.1.1.1这个地址时所使用的来源IP，取此IP为公网IP地址。
-// 如果获取失败，或者查询发现使用的IP地址是私有IP地址，则返回127.0.0.1。
-func MyWanIP() (ip net.IP) {
-	const (
-		TARGET = "1.1.1.1"
-	)
-
-	if _MyWanIP != nil && time.Now().Sub(_MyWanIPLast) < 3*time.Second {
-		ip = make(net.IP, len(_MyWanIP))
-		copy(ip, _MyWanIP)
-		return
-	}
-
-	defer func() {
-		if ip == nil || ip.IsPrivate() {
+// MyWanIP 返回本机上绑定的公网IP地址，即访问1.1.1.1时选用的源地址。
+// 探测失败或该地址并非公网地址时返回127.0.0.1
+func MyWanIP() net.IP {
+	probed.Lock()
+	defer probed.Unlock()
+	if probed.wan == nil || time.Since(probed.wanLast) >= probeTTL {
+		var ip = RouteSource("1.1.1.1")
+		if ip == nil || !IsPublicIPv4(ip) {
 			ip = net.IPv4(127, 0, 0, 1)
 		}
-		var clone = make(net.IP, len(ip))
-		copy(clone, ip)
-		_MyWanIP = clone
-		_MyWanIPLast = time.Now()
-	}()
-
-	return RouteSource(TARGET)
+		probed.wan, probed.wanLast = ip, time.Now()
+	}
+	return slices.Clone(probed.wan)
 }
 
-// RouteSource 使用命令行的方式，探测本机访问target时会使用的来源ip地址。
-// 如果探测失败或者没能得到正确的ip，返回nil
-func RouteSource(target string) (ip net.IP) {
-	if runtime.GOOS == "darwin" {
-		// route -n -v get 172.16.0.1
-		// u: inet 172.16.0.1; u: link ; RTM_GET: Report Metrics: len 128, pid: 0, seq 1, errno 0, flags:<UP,GATEWAY,HOST,STATIC>
-		// locks:  inits:
-		// sockaddrs: <DST,IFP>
-		//  172.16.0.1
-		//    route to: 172.16.0.1
-		// destination: 128.0.0.0
-		//        mask: 128.0.0.0
-		//     gateway: 10.94.12.9
-		//   interface: utun10
-		//       flags: <UP,GATEWAY,DONE,STATIC,PRCLONING>
-		//  recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire
-		//        0         0         0         0         0         0      1412         0
-		//
-		// locks:  inits:
-		// sockaddrs: <DST,GATEWAY,NETMASK,IFP,IFA>
-		//  128.0.0.0 10.94.12.9 128.0.0.0 utun10 10.94.12.10
-		// we need 'IFA' of last line to find
-		var cmd = exec.Command("route", "-nv", "get", target)
-		if out, err := cmd.Output(); err == nil {
-			var hit bool
-			for line := range strings.SplitSeq(string(out), "\n") {
-				var oss = strings.Fields(line)
-				if hit {
-					if src := net.ParseIP(oss[len(oss)-1]); src != nil {
-						return src
-					}
-					break
-				}
-				hit = len(oss) == 2 && oss[0] == "sockaddrs:" &&
-					oss[1] == "<DST,GATEWAY,NETMASK,IFP,IFA>"
-			}
-		}
-	} else if runtime.GOOS == "linux" {
-		// ip route get 172.16.0.1
-		// output e.g.
-		// 172.16.0.1 via 172.18.133.193 dev manbr  src 172.18.133.235
-		//    cache
-		// we need 'src 172.18.133.235', and 172.18.133.235 is the target to find
-		var cmd = exec.Command("ip", "route", "get", target)
-		if out, err := cmd.Output(); err == nil {
-			// output parse, find src <target>
-			var oss = bytes.Fields(out)
-			for i, v := range oss {
-				if string(v) != "src" {
-					continue
-				}
-				if len(oss)-1 >= i+1 {
-					if src := net.ParseIP(string(oss[i+1])); src != nil {
-						return src
-					}
-				}
-				break
-			}
-		}
+// RouteSource 探测本机访问target时选用的源地址，探测失败返回nil。
+// 对UDP套接字执行connect只触发内核选路，并不发包
+func RouteSource(target string) net.IP {
+	var c, err = net.Dial("udp", net.JoinHostPort(target, "9"))
+	if err != nil {
+		return nil
 	}
-	return nil
+	defer c.Close()
+	// 与net.ParseIP的结果保持同一形式
+	return c.LocalAddr().(*net.UDPAddr).IP.To16()
 }

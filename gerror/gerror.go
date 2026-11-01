@@ -51,7 +51,7 @@ func New(code protoreflect.Enum, format string, a ...any) *GError {
 	if gerr.Code <= 0 {
 		panic(fmt.Errorf("error code must be a positive enum number"))
 	} else if gerr.Code == CODE_GLOBAL_BOUNDARY {
-		panic(fmt.Errorf("reserverd error code[%d] for local & global boundary", CODE_GLOBAL_BOUNDARY))
+		panic(fmt.Errorf("reserved error code[%d] for local & global boundary", CODE_GLOBAL_BOUNDARY))
 	}
 	return gerr
 }
@@ -96,6 +96,11 @@ func (e *GError) IsGrpcTimeout() bool {
 // is grpc unknown error
 func (e *GError) IsGrpcUnknown() bool {
 	return e.Code == -1*int32(codes.Unknown)
+}
+
+// is grpc unavailable error
+func (e *GError) IsGrpcUnavailable() bool {
+	return e.Code == -1*int32(codes.Unavailable)
 }
 
 // Error implement error interface

@@ -3,17 +3,37 @@ package xiao
 import (
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"io"
 
 	"github.com/goccy/go-json"
 )
 
-func Json(msg any) json.RawMessage {
+// RawJson 刻意不实现fmt.Stringer：go1.27起json.RawMessage即jsontext.Value，带String方法，
+// 经zap.Any输出时会被当作字符串转义
+type RawJson []byte
+
+func (r RawJson) MarshalJSON() ([]byte, error) {
+	if r == nil {
+		return []byte("null"), nil
+	}
+	return r, nil
+}
+
+func (r *RawJson) UnmarshalJSON(data []byte) error {
+	if r == nil {
+		return errors.New("xiao.RawJson: UnmarshalJSON on nil pointer")
+	}
+	*r = append((*r)[0:0], data...)
+	return nil
+}
+
+func Json(msg any) RawJson {
 	if raw, yes := msg.([]byte); yes {
-		return json.RawMessage(raw)
+		return RawJson(raw)
 	}
 	js, _ := json.Marshal(msg)
-	return json.RawMessage(js)
+	return RawJson(js)
 }
 
 func JsonPretty(msg any, prefix ...string) string {

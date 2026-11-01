@@ -39,7 +39,8 @@ func UseDefaultLogger() (func(), error) {
 	return ReplaceLogger(logger), nil
 }
 
-// UseDevlopLogger 使用预定义的简单zap.Logger替换全局默认zap.Logger，适合于开发、测试、写简单的工具时用。
+// UseDevelopLogger 使用预定义的简单zap.Logger替换全局默认zap.Logger，适合于开发、测试、写简单的工具时用。
+// 日志写入当前目录下名为log的文件。
 func UseDevelopLogger() (func(), error) {
 	var logger, err = NewSimpleLogger("debug", "log", "console", false)
 	if err != nil {

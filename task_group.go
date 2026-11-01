@@ -43,6 +43,10 @@ func (tg *TaskGroup) Count() int {
 	return tg.cnt
 }
 
+// Done 是停止信号而非任务完成信号，未关联Event时永不触发
 func (tg *TaskGroup) Done() <-chan struct{} {
+	if tg.evt == nil {
+		return nil
+	}
 	return tg.evt.Yes()
 }

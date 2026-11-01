@@ -16,3 +16,10 @@ func TestUniqCSVAddrs(t *testing.T) {
 	var str = PrettyCSVAddr(2181, "127.0.0.1:2181")
 	t.Log("str " + str)
 }
+
+func TestUniqCSVAddrsZeroPort(t *testing.T) {
+	var got = strings.Join(UniqCSVAddrs(2181, "[::1]:0", "127.0.0.1:0"), ",")
+	if want := "[::1]:2181,127.0.0.1:2181"; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}

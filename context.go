@@ -60,7 +60,7 @@ type Context interface {
 	GetFloat(key any) float64
 	GetBool(key any) bool
 
-	// mute/unmute my logger
+	// Mute 原地屏蔽本Context的Debug至Error级日志，派生时继承当时的状态；Panic/Fatal不受影响
 	Mute()
 	Unmute()
 	// Logger return my logger
@@ -80,7 +80,7 @@ type Context interface {
 	Fatalf(template string, args ...any)
 }
 
-// Generator 定义了一个Context的生成函数，每次调用都应当返回一个新的Context
+// ContextGenerator 定义了一个Context的生成函数，每次调用都应当返回一个新的Context
 type ContextGenerator = func() Context
 
 type context struct {
@@ -121,7 +121,7 @@ func NewContext(gctx gcontext.Context, env Env, log Logger) Context {
 }
 
 // SimpleContext return a very simple context, without name, without location,
-// and use S() as internal logger
+// and use the global zap logger as internal logger
 func SimpleContext() Context {
 	return NewContext(
 		gcontext.Background(),

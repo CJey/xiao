@@ -1,6 +1,10 @@
 package xiao
 
 import (
+	"fmt"
+	"os"
+	"sync/atomic"
+
 	"go.uber.org/zap"
 )
 
@@ -39,6 +43,7 @@ type Logger interface {
 	Warnf(template string, args ...any)
 	Error(msg string, kvs ...any)
 	Errorf(template string, args ...any)
+	// Panic/Fatal不受Mute影响，未配置zap时也照常panic或退出进程
 	Panic(msg string, kvs ...any)
 	Panicf(template string, args ...any)
 	Fatal(msg string, kvs ...any)
@@ -49,16 +54,15 @@ type Logger interface {
 	// Sync flush log buffers
 	Sync() error
 
-	// Mute
+	// Mute 原地屏蔽Debug至Error级别的输出，Fork时继承当时的状态
 	Mute()
-	// Unmute
 	Unmute()
 }
 
 type logger struct {
 	zap0  *zap.SugaredLogger
 	zap   *zap.SugaredLogger
-	muted bool
+	muted atomic.Bool
 
 	nameJoiner     NameJoiner
 	locationJoiner LocationJoiner
@@ -71,7 +75,7 @@ type logger struct {
 var _ Logger = &logger{}
 
 // mostly return origin + . + given
-func nameJoineroiner(origin, given string) string {
+func defaultNameJoiner(origin, given string) string {
 	const sep = "."
 	if given != "" {
 		if origin != "" {
@@ -83,12 +87,12 @@ func nameJoineroiner(origin, given string) string {
 }
 
 // mostly return @, origin + / + given
-func locationJoiner(origin, given string) (string, string) {
+func defaultLocationJoiner(origin, given string) (string, string) {
 	const sep = "/"
 	const key = "@"
 	if given != "" {
 		if origin != "" {
-			return key, origin + "/" + given
+			return key, origin + sep + given
 		}
 		return key, given
 	}
@@ -97,7 +101,7 @@ func locationJoiner(origin, given string) (string, string) {
 
 // NewLogger return a Logger, with name and location.
 // name and location are optional, empty string means no name, no location.
-// z0, nj, lj are optional too, default nj is nameJoiner, default lj is locationJoiner, but no default z0.
+// z0, nj, lj are optional too, default nj is defaultNameJoiner, default lj is defaultLocationJoiner, but no default z0.
 // nj and lj will be used when Fork() invoked
 func NewLogger(name, location string, z0 *zap.SugaredLogger, nj NameJoiner, lj LocationJoiner) Logger {
 	return (&logger{
@@ -110,13 +114,13 @@ func NewLogger(name, location string, z0 *zap.SugaredLogger, nj NameJoiner, lj L
 
 func (l *logger) fork(skip int, name, location string) *logger {
 	var l2 = &logger{
-		zap0:  l.zap0,
-		zap:   l.zap0,
-		muted: l.muted,
+		zap0: l.zap0,
+		zap:  l.zap0,
 
 		nameJoiner:     l.nameJoiner,
 		locationJoiner: l.locationJoiner,
 	}
+	l2.muted.Store(l.muted.Load())
 
 	if skip != 0 {
 		if l2.zap0 != nil {
@@ -128,14 +132,14 @@ func (l *logger) fork(skip int, name, location string) *logger {
 	}
 
 	if l2.nameJoiner == nil {
-		l2.name = nameJoineroiner(l.name, name)
+		l2.name = defaultNameJoiner(l.name, name)
 	} else {
 		l2.name = l2.nameJoiner(l.name, name)
 	}
 
 	var field string
 	if l2.locationJoiner == nil {
-		field, l2.location = locationJoiner(l.location, location)
+		field, l2.location = defaultLocationJoiner(l.location, location)
 	} else {
 		field, l2.location = l2.locationJoiner(l.location, location)
 	}
@@ -171,94 +175,104 @@ func (l *logger) Location() string {
 }
 
 func (l *logger) Debug(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Debugw(msg, kvs...)
 }
 
 func (l *logger) Debugf(template string, args ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Debugf(template, args...)
 }
 
 func (l *logger) Info(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Infow(msg, kvs...)
 }
 
 func (l *logger) Infof(template string, args ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Infof(template, args...)
 }
 
 func (l *logger) Warn(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Warnw(msg, kvs...)
 }
 
 func (l *logger) Warnf(template string, args ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Warnf(template, args...)
 }
 
 func (l *logger) Error(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Errorw(msg, kvs...)
 }
 
 func (l *logger) Errorf(template string, args ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil || l.muted.Load() {
 		return
 	}
 	l.zap.Errorf(template, args...)
 }
 
 func (l *logger) Panic(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
-		return
+	if l.zap == nil {
+		panic(msg)
 	}
 	l.zap.Panicw(msg, kvs...)
 }
 
 func (l *logger) Panicf(template string, args ...any) {
-	if l.zap == nil || l.muted {
-		return
+	if l.zap == nil {
+		panic(fmt.Sprintf(template, args...))
 	}
 	l.zap.Panicf(template, args...)
 }
 
 func (l *logger) Fatal(msg string, kvs ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil {
+		exitWithoutZap(append([]any{msg}, kvs...)...)
 		return
 	}
 	l.zap.Fatalw(msg, kvs...)
 }
 
 func (l *logger) Fatalf(template string, args ...any) {
-	if l.zap == nil || l.muted {
+	if l.zap == nil {
+		exitWithoutZap(fmt.Sprintf(template, args...))
 		return
 	}
 	l.zap.Fatalf(template, args...)
+}
+
+// exitWithoutZap 未配置zap时，Fatal的消息改写stderr，免得进程无声退出
+func exitWithoutZap(a ...any) {
+	fmt.Fprintln(os.Stderr, a...)
+	os.Exit(1)
 }
 
 func (l *logger) With(kvs ...any) Logger {
 	var l2 = l.fork(0, "", "")
 	if len(kvs) > 0 {
 		l2.with = append(l2.with, kvs...)
-		l2.zap = l2.zap.With(kvs...)
+		if l2.zap != nil {
+			l2.zap = l2.zap.With(kvs...)
+		}
 	}
 	return l2
 }
@@ -271,9 +285,9 @@ func (l *logger) Sync() error {
 }
 
 func (l *logger) Mute() {
-	l.muted = true
+	l.muted.Store(true)
 }
 
 func (l *logger) Unmute() {
-	l.muted = false
+	l.muted.Store(false)
 }

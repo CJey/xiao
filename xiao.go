@@ -35,12 +35,12 @@ func SessionNameGenerator(header string) func(...string) string {
 	}
 }
 
-// SessinalContext 返回一个简单的Context，命名部分使用自动生成的uuid。
+// SessionalContext 的名称由BootID前24位与12位自增序号组成。
 func SessionalContext(prefix ...string) Context {
 	return NamedContext(bootQ(prefix...))
 }
 
-// ToSesionalContext 将给定的标准库Context对象对位Context的内部基础对象，并自动生成uuid作为name。
+// ToSessionalContext 以给定的标准库Context作为内部基础对象，名称规则同SessionalContext。
 func ToSessionalContext(gctx gcontext.Context, prefix ...string) Context {
 	return ToNamedContext(gctx, bootQ(prefix...))
 }

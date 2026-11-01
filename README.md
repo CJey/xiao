@@ -10,7 +10,7 @@ import "github.com/cjey/xiao"
 
 ## Context
 
-Context在实现了官方的Context接口外，额外追加了环境变量和日志能力，主包在此基础上做了个应用封装
+Context在实现了官方的Context接口外，额外追加了环境变量和日志能力
 
 ### 关键特性
 
@@ -46,11 +46,15 @@ Set操作将只针对自己当前的变量空间，不会影响上游空间，�
 
 这是一组快捷操作，等价于调用Context内的Logger，用于提供基本的日志操作，内部的logger选择了zap.SugaredLogger，日志格式也默认被重新调整过，如果想定制格式，可以直接自行执行全局替换
 
-如果只是想要在默认风格上调整日志等级/日志文件/日志编码等配置，可以直接使用ReplaceZapLogger完成目标
+如果只是想要在默认风格上调整日志等级/日志文件/日志编码等配置，可以直接使用UseSimpleLogger完成目标，已有现成的zap.Logger时则用ReplaceLogger
 
-默认：ReplaceZapLogger("debug", "stderr", "console", false)
+默认：UseSimpleLogger("info", "stderr", "console", false)
 
-info+json: ReplaceZapLogger("info", "stderr", "json", false)
+info+json：UseSimpleLogger("info", "stderr", "json", false)
+
+**Mute/Unmute**
+
+原地屏蔽或恢复当前Context的Debug至Error级日志，适合高频请求按需静默，派生出的Context继承派生时的状态。Panic/Fatal不受影响，照常输出并终止
 
 ### NamedContext
 
@@ -59,7 +63,7 @@ Context可以支持自命名，一般用于伴随服务生命周期的任务，�
 对于这样的用法，需要注意的是，Context创建时，其内部的logger已经固定，比如定时执行类的任务，如果在运行时需要动态调整logger，应当在每次执行时重新创建一个同名的Context
 
 ```go
-var ctx = gbase.NamedContext("ZookeeperMonitor")
+var ctx = xiao.NamedContext("ZookeeperMonitor")
 ctx.Info("started")
 // console encode
 // 2020-04-11 21:24:45.361  info    ZookeeperMonitor started
@@ -75,16 +79,16 @@ ctx.Info("got it!", "id", ctx.GetString("id"))
 // {"L":"info","T":"2020-04-11 21:24:45.361","N":"ZookeeperMonitor","M":"got it!", "@": "GetID", "id": "123"}
 ```
 
-### SessionContext
+### SessionalContext
 
-还可以选择使用自动生成uuid风格名称的Context，适用于服务请求开始时，为本次请求创建一个SessionContext。
+还可以选择使用自动生成uuid风格名称的Context，适用于服务请求开始时，为本次请求创建一个SessionalContext。
 
 生成的Context的name即是一个带有一定规律的uuid（以BootID的前24位为前缀+12位10进制数字递增序列）
 
-你还可以通过替换变量SessionNameGenerator的方式来实现定制session的生成规则
+如需定制命名规则，可用SessionNameGenerator创建自己的生成器，再交给NamedContext使用
 
 ```go
-var ctx = gbase.SessionContext()
+var ctx = xiao.SessionalContext()
 ctx.Info("started")
 // console encode
 // 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001 started
@@ -92,14 +96,14 @@ ctx.Info("started")
 // {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001","M":"started"}
 
 ctx = ctx.ForkAt("AsyncGetID")
-ctx.Info("show default session", "session", GetSesson(ctx))
+ctx.Info("show default session", "session", xiao.GetSession(ctx))
 // console encode
 // 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1 show default session {"@": "AsyncGetID", "session": "9b2119d3-7f37-4033-8c19-000000000001.1"}
 // json encode
 // {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001.1","M":"show default session", "@": "AsyncGetID", "session": "9b2119d3-7f37-4033-8c19-000000000001.1"}
 
-SetSession(ctx, "7ec17674-1360-4fb1-9245-bd8d8d5866c4")
-ctx.Info("use my own session", "session", GetSession(ctx))
+xiao.SetSession(ctx, "7ec17674-1360-4fb1-9245-bd8d8d5866c4")
+ctx.Info("use my own session", "session", xiao.GetSession(ctx))
 // console encode
 // 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1 use my own session {"@": "AsyncGetID", "session": "7ec17674-1360-4fb1-9245-bd8d8d5866c4"}
 // json encode
@@ -108,4 +112,12 @@ ctx.Info("use my own session", "session", GetSession(ctx))
 
 ### ToContext
 
-NamedContext和SessionContext都使用官方context的Background作为内部context，如果需要使用自定义的context或者将官方的context执行转换，则可以使用**ToSessionContext**和**ToNamedContext**
+NamedContext和SessionalContext都使用官方context的Background作为内部context，如果需要使用自定义的context或者将官方的context执行转换，则可以使用**ToSessionalContext**和**ToNamedContext**
+
+## 其他
+
+- **Event / TaskGroup / LimitGroup**：一次性事件通知、带停止信号的任务组、并发配额限制
+- **Json / RawJson / JsonPretty / Gzip / Gunzip**：常用的序列化与压缩工具，`Json`的结果可直接作为日志字段输出
+- **gerror**：把业务错误码编进grpc的带外错误，handler可直接返回`*GError`，调用方以`Decode`还原
+- **netkit**：地址补全与去重、本机管理网与公网地址探测、TCPing与ICMPing
+- **ttykit**：把本地终端接到远端的交互式会话，同`ssh -t`

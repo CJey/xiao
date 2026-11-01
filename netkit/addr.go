@@ -112,7 +112,7 @@ func UniqCSVAddrs(port uint16, csvs ...string) []string {
 					return
 				}
 				if num == 0 {
-					addr = h + ":" + pstr
+					addr = net.JoinHostPort(h, pstr)
 				}
 				// do nothing
 			} else if bytes.IndexByte(baddr, ':') < 0 {
