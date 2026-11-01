@@ -21,11 +21,11 @@ var bootQ = SessionNameGenerator(BootID[:24])
 // SessionNameGenerator 返回一个命名生成器，会自动在header后面追加12位长的自增字符串，
 // 同时支持提供额外的前缀，会被附加在header之前。
 func SessionNameGenerator(header string) func(...string) string {
-	var counter uint64
+	var counter atomic.Uint64
 	return func(prefix ...string) string {
 		// return bootid related sequential name
 		const h = "000000000000"
-		var seq = atomic.AddUint64(&counter, 1)
+		var seq = counter.Add(1)
 		var s = strconv.FormatUint(seq, 10)
 		if len(prefix) > 0 {
 			return prefix[0] + header + h[:12-len(s)] + s
