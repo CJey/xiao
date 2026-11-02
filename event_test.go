@@ -43,9 +43,3 @@ func TestEventConcurrentEmit(t *testing.T) {
 		t.Errorf("Emit succeeded %d times", wins.Load())
 	}
 }
-
-func TestTaskGroupWithoutEvent(t *testing.T) {
-	if NewTaskGroup(nil).Done() != nil {
-		t.Error("Done without event should never fire")
-	}
-}

@@ -21,6 +21,7 @@ type Env interface {
 	Has(key any) (ok bool)
 	Keys() []any
 
+	// GetXxx 键不存在或值为nil时返回零值，类型不符时panic
 	GetInt(key any) int
 	GetInt64(key any) int64
 	GetUint(key any) uint
@@ -109,79 +110,22 @@ func (e *env) Keys() []any {
 	return keys
 }
 
-func (e *env) GetInt(key any) int {
-	if value, ok := e.Get(key); ok {
-		return value.(int)
+func getAs[T any](e *env, key any) T {
+	if value, ok := e.Get(key); ok && value != nil {
+		return value.(T)
 	}
-	return 0
+	var zero T
+	return zero
 }
 
-func (e *env) GetInt64(key any) int64 {
-	if value, ok := e.Get(key); ok {
-		return value.(int64)
-	}
-	return 0
-}
-
-func (e *env) GetUint(key any) uint {
-	if value, ok := e.Get(key); ok {
-		return value.(uint)
-	}
-	return 0
-}
-
-func (e *env) GetUint64(key any) uint64 {
-	if value, ok := e.Get(key); ok {
-		return value.(uint64)
-	}
-	return 0
-}
-
-func (e *env) GetBool(key any) bool {
-	if value, ok := e.Get(key); ok {
-		return value.(bool)
-	}
-	return false
-}
-
-func (e *env) GetFloat(key any) float64 {
-	if value, ok := e.Get(key); ok {
-		return value.(float64)
-	}
-	return 0.0
-}
-
-func (e *env) GetString(key any) string {
-	if value, ok := e.Get(key); ok {
-		return value.(string)
-	}
-	return ""
-}
-
-func (e *env) GetIP(key any) net.IP {
-	if value, ok := e.Get(key); ok {
-		return value.(net.IP)
-	}
-	return nil
-}
-
-func (e *env) GetAddr(key any) net.Addr {
-	if value, ok := e.Get(key); ok {
-		return value.(net.Addr)
-	}
-	return nil
-}
-
-func (e *env) GetTime(key any) time.Time {
-	if value, ok := e.Get(key); ok {
-		return value.(time.Time)
-	}
-	return time.Time{}
-}
-
-func (e *env) GetDuration(key any) time.Duration {
-	if value, ok := e.Get(key); ok {
-		return value.(time.Duration)
-	}
-	return 0
-}
+func (e *env) GetInt(key any) int                { return getAs[int](e, key) }
+func (e *env) GetInt64(key any) int64            { return getAs[int64](e, key) }
+func (e *env) GetUint(key any) uint              { return getAs[uint](e, key) }
+func (e *env) GetUint64(key any) uint64          { return getAs[uint64](e, key) }
+func (e *env) GetBool(key any) bool              { return getAs[bool](e, key) }
+func (e *env) GetFloat(key any) float64          { return getAs[float64](e, key) }
+func (e *env) GetString(key any) string          { return getAs[string](e, key) }
+func (e *env) GetIP(key any) net.IP              { return getAs[net.IP](e, key) }
+func (e *env) GetAddr(key any) net.Addr          { return getAs[net.Addr](e, key) }
+func (e *env) GetTime(key any) time.Time         { return getAs[time.Time](e, key) }
+func (e *env) GetDuration(key any) time.Duration { return getAs[time.Duration](e, key) }

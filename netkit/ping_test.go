@@ -65,3 +65,28 @@ func TestICMPing(t *testing.T) {
 		}
 	}
 }
+
+// 超时语义同net.Dialer：0为不限时，负值即刻超时
+func TestPingTimeout(t *testing.T) {
+	var lsn, err = net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lsn.Close()
+
+	if _, err := TCPing(lsn.Addr().String(), 0); err != nil {
+		t.Errorf("TCPing without timeout: %v", err)
+	}
+	if _, err := TCPing(lsn.Addr().String(), -1); err == nil {
+		t.Error("TCPing with negative timeout should fail")
+	}
+
+	if _, err := ICMPing("127.0.0.1", 0); errors.Is(err, os.ErrPermission) {
+		t.Skipf("gid is out of net.ipv4.ping_group_range, %v", err)
+	} else if err != nil {
+		t.Errorf("ICMPing without timeout: %v", err)
+	}
+	if _, err := ICMPing("127.0.0.1", -1); err == nil {
+		t.Error("ICMPing with negative timeout should fail")
+	}
+}

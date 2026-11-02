@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
-// TCPing detect rtt time by establishing a tcp connection.
+// TCPing 以建立tcp连接的耗时为rtt，timeout为0表示不限时，与net.Dialer一致
 func TCPing(target string, timeout time.Duration) (time.Duration, error) {
 	return TCPingV2("", target, timeout)
 }
@@ -60,7 +60,8 @@ func TCPingV2(source, target string, timeout time.Duration) (time.Duration, erro
 	return end.Sub(begin), nil
 }
 
-// ICMPing 以icmp echo探测rtt。使用非特权的icmp数据报套接字，无需root或CAP_NET_RAW，
+// ICMPing 以icmp echo探测rtt，timeout语义同TCPing，不限时则丢包后一直等待。
+// 使用非特权的icmp数据报套接字，无需root或CAP_NET_RAW，
 // 但进程的gid须落在sysctl net.ipv4.ping_group_range之内，ipv6同受此项约束
 func ICMPing(target string, timeout time.Duration) (time.Duration, error) {
 	return ICMPingV2("", target, timeout)
@@ -74,9 +75,15 @@ func ICMPingV2(source, target string, timeout time.Duration) (time.Duration, err
 		return 0, err
 	}
 
-	var deadline = time.Now().Add(timeout)
-	var ctx, cancel = context.WithDeadline(context.Background(), deadline)
-	defer cancel()
+	// 零值deadline即不限时
+	var ctx = context.Background()
+	var deadline time.Time
+	if timeout != 0 {
+		deadline = time.Now().Add(timeout)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
 
 	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, target)
 	if err != nil {

@@ -23,7 +23,7 @@ func captureLogger(t *testing.T) *bytes.Buffer {
 }
 
 func TestLogger(t *testing.T) {
-	var L = NewLogger("", "", _S, nil, nil)
+	var L = NewLogger("", "", global.Load(), nil, nil)
 
 	L = L.With("A", "B")
 	L.Info("Yes")

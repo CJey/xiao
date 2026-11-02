@@ -12,9 +12,9 @@ type LimitGroup interface {
 	Do()
 	// Done 等价于 Add(-1)
 	Done()
-	// Go 等价于 Add(1)&fn()&Add(-1)
+	// Go 等价于 Add(1)&fn()&Add(-1)，约定同sync.WaitGroup.Go
 	Go(fn func())
-	// Add 占用(tasks > 0)或释放(tasks < 0)若干任务配额，配额不足时占用操作阻塞。
+	// Add 占用(tasks > 0)或释放(tasks < 0)若干任务配额，配额不足时占用操作阻塞，其余约定同sync.WaitGroup。
 	// 单次数量超过最大并发数时必然死锁，故直接panic
 	Add(tasks int)
 	Max() uint
@@ -90,10 +90,11 @@ func (lg *limitGroup) Add(tasks int) {
 		if -tasks > cap(lg.ch) {
 			panic(fmt.Errorf("LimitGroup: tasks[%d] done greater than max[%d]", -tasks, cap(lg.ch)))
 		}
+		// 先减计数：释放多于占用时同sync.WaitGroup一样panic，而不是卡在等配额上
+		lg.wg.Add(tasks)
 		for i := tasks; i < 0; i++ {
 			<-lg.ch
 		}
-		lg.wg.Add(tasks)
 	}
 }
 
@@ -108,7 +109,13 @@ func (lg *limitGroup) Done() {
 func (lg *limitGroup) Go(fn func()) {
 	lg.Add(1)
 	go func() {
-		defer lg.Done()
+		defer func() {
+			// 同sync.WaitGroup.Go：fn panic时不释放，免得Wait就此返回，赶在崩溃之前退出进程
+			if x := recover(); x != nil {
+				panic(x)
+			}
+			lg.Done()
+		}()
 		fn()
 	}()
 }

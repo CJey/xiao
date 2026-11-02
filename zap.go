@@ -2,21 +2,22 @@ package xiao
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	_L = zap.NewNop()
-	_S = _L.Sugar()
-)
+// global 是此后创建的Context所用的zap，运行期可被替换
+var global atomic.Pointer[zap.SugaredLogger]
 
 func init() {
+	global.Store(zap.NewNop().Sugar())
 	if _, err := UseDefaultLogger(); err != nil {
 		panic(err)
 	}
@@ -24,10 +25,8 @@ func init() {
 
 // ReplaceLogger 用给定的zap.Logger替换context内部的默认全局zap.Logger和zap.SugaredLogger
 func ReplaceLogger(logger *zap.Logger) func() {
-	var prev = _L
-	_L = logger
-	_S = logger.Sugar()
-	return func() { ReplaceLogger(prev) }
+	var prev = global.Swap(logger.Sugar())
+	return func() { ReplaceLogger(prev.Desugar()) }
 }
 
 // UseDefaultLogger 使用预定义的简单zap.Logger替换全局默认zap.Logger。
@@ -78,7 +77,7 @@ func NewSimpleLogger(level, outpath, encoding string, disableCaller bool) (*zap.
 		return nil, errors.New("Unexpected log level " + level)
 	}
 
-	if dir := filepath.Dir(outpath); dir != "." && dir != ".." && dir != "/" {
+	if dir := filepath.Dir(sinkFilePath(outpath)); dir != "." && dir != ".." && dir != "/" {
 		if _, e := os.Stat(dir); errors.Is(e, os.ErrNotExist) {
 			if e := os.MkdirAll(dir, 0755); e != nil {
 				return nil, e
@@ -122,4 +121,16 @@ func NewSimpleLogger(level, outpath, encoding string, disableCaller bool) (*zap.
 		InitialFields:    nil,
 	}
 	return zcfg.Build()
+}
+
+// sinkFilePath 按zap打开输出的规则取出文件路径，非文件类输出返回空
+func sinkFilePath(outpath string) string {
+	if filepath.IsAbs(outpath) {
+		return outpath
+	}
+	var u, err = url.Parse(outpath)
+	if err != nil || (u.Scheme != "" && u.Scheme != "file") {
+		return ""
+	}
+	return u.Path
 }

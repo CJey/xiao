@@ -1,10 +1,42 @@
 package xiao
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
 )
+
+// fn panic时Wait不得返回，进程须随panic崩溃，而非正常退出
+func TestLimitGroupGoPanic(t *testing.T) {
+	if os.Getenv("XIAO_TEST_PANIC") != "" {
+		var lg = NewLimitGroup(1)
+		lg.Go(func() { panic("boom") })
+		lg.Wait()
+		os.Exit(0)
+	}
+	expectPanicExit(t)
+}
+
+// 多调一次Done同sync.WaitGroup一样panic，而不是卡死
+func TestLimitGroupExtraDone(t *testing.T) {
+	var recovered = make(chan any, 1)
+	go func() {
+		defer func() { recovered <- recover() }()
+		var lg = NewLimitGroup(2)
+		lg.Do()
+		lg.Done()
+		lg.Done()
+	}()
+	select {
+	case x := <-recovered:
+		if x == nil {
+			t.Error("extra Done should panic")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("extra Done blocked")
+	}
+}
 
 func TestLimitGroup(t *testing.T) {
 	var lg = NewLimitGroup(3)

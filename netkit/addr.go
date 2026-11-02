@@ -12,13 +12,14 @@ import (
 
 // AddrCompletion convert given raw string to standardized address.
 // If the ip/port part of raw missing, will use ip and port to complete it.
-// ""                => ip:port
-// 80, :80           => ip:80
-// 1.1.1.1, 1.1.1.1: => 1.1.1.1:port
+// ""                  => ip:port
+// 80, :80             => ip:80
+// 1.1.1.1, 1.1.1.1:   => 1.1.1.1:port
+// ::1, [::1], [::1]:  => [::1]:port
 func AddrCompletion(raw string, ip net.IP, port uint16) (string, error) {
 	if raw = strings.TrimSpace(raw); raw == "" {
 		raw = net.JoinHostPort("", "")
-	} else if rawip := net.ParseIP(raw); rawip != nil {
+	} else if rawip := parseBareIP(raw); rawip != nil {
 		raw = net.JoinHostPort(rawip.String(), "")
 	} else if n, err := strconv.ParseUint(raw, 10, 64); err == nil {
 		raw = net.JoinHostPort("", strconv.FormatUint(n, 10))
@@ -103,35 +104,30 @@ func UniqCSVAddrs(port uint16, csvs ...string) []string {
 		if addr == "" {
 			return
 		}
-		if port > 0 {
-			if ip := net.ParseIP(addr); ip != nil {
-				addr = net.JoinHostPort(ip.String(), pstr)
-			} else if h, p, err := net.SplitHostPort(addr); err == nil {
-				num, err := strconv.ParseUint(p, 10, 16)
-				if err != nil {
-					return
-				}
-				if num == 0 {
-					addr = net.JoinHostPort(h, pstr)
-				}
-				// do nothing
-			} else if bytes.IndexByte(baddr, ':') < 0 {
-				addr += ":" + pstr
+		if ip := parseBareIP(addr); ip != nil {
+			addr = ip.String()
+			if port > 0 {
+				addr = net.JoinHostPort(addr, pstr)
 			}
-		} else {
-			if ip := net.ParseIP(addr); ip != nil {
-				// do nothing
-			} else if h, p, err := net.SplitHostPort(addr); err == nil {
-				num, err := strconv.ParseUint(p, 10, 16)
-				if err != nil {
+		} else if h, p, err := net.SplitHostPort(addr); err == nil {
+			// 端口留空等同于0
+			var num uint64
+			if p != "" {
+				if num, err = strconv.ParseUint(p, 10, 16); err != nil {
 					return
 				}
-				if num == 0 {
+			}
+			if num == 0 {
+				if port > 0 {
+					addr = net.JoinHostPort(h, pstr)
+				} else {
 					addr = h
 				}
 			}
+		} else if port > 0 && bytes.IndexByte(baddr, ':') < 0 {
+			addr += ":" + pstr
 		}
-		if hit[addr] == false {
+		if addr != "" && !hit[addr] {
 			addrs = append(addrs, addr)
 			hit[addr] = true
 		}
@@ -155,6 +151,14 @@ func UniqCSVAddrs(port uint16, csvs ...string) []string {
 	}
 
 	return addrs
+}
+
+// parseBareIP 解析不带端口的IP，IPv6可带方括号
+func parseBareIP(s string) net.IP {
+	if len(s) > 2 && s[0] == '[' && s[len(s)-1] == ']' {
+		s = s[1 : len(s)-1]
+	}
+	return net.ParseIP(s)
 }
 
 // TrimPort 将把给定的所有地址中端口号等于给定端口的地址，删除掉端口号，达到删除默认端口号的功能。

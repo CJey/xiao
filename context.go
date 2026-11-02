@@ -31,8 +31,7 @@ type Context interface {
 	// it should chain all locations start from root
 	At(location string) Context
 	ForkAt(location string) Context
-	// Reborn will use gcontext.Background() instead of internal context,
-	// it used for escaping internal context's cancel request
+	// Reborn 摆脱内部Context的取消与截止时间，保留其中的value
 	Reborn() Context
 	// RebornWith will use specified context instead of internal context,
 	// it used for escaping internal context's cancel request
@@ -126,7 +125,7 @@ func SimpleContext() Context {
 	return NewContext(
 		gcontext.Background(),
 		NewEnv(),
-		NewLogger("", "", _S, nil, nil),
+		NewLogger("", "", global.Load(), nil, nil),
 	)
 }
 
@@ -135,7 +134,7 @@ func ToSimpleContext(gctx gcontext.Context) Context {
 	return NewContext(
 		gctx,
 		NewEnv(),
-		NewLogger("", "", _S, nil, nil),
+		NewLogger("", "", global.Load(), nil, nil),
 	)
 }
 
@@ -144,7 +143,7 @@ func NamedContext(name string) Context {
 	return NewContext(
 		gcontext.Background(),
 		NewEnv(),
-		NewLogger(name, "", _S, nil, nil),
+		NewLogger(name, "", global.Load(), nil, nil),
 	)
 }
 
@@ -153,7 +152,7 @@ func ToNamedContext(gctx gcontext.Context, name string) Context {
 	return NewContext(
 		gctx,
 		NewEnv(),
-		NewLogger(name, "", _S, nil, nil),
+		NewLogger(name, "", global.Load(), nil, nil),
 	)
 }
 
@@ -200,7 +199,7 @@ func (ctx *context) ForkAt(location string) Context {
 }
 
 func (ctx *context) Reborn() Context {
-	return ctx.RebornWith(gcontext.Background())
+	return ctx.RebornWith(gcontext.WithoutCancel(ctx.gctx))
 }
 
 func (ctx *context) RebornWith(gctx gcontext.Context) Context {
