@@ -17,7 +17,7 @@ var probed struct {
 }
 
 // MyManIP 返回本机上的管理网络IP地址，即访问10.0.0.1时选用的源地址。
-// 探测失败或该地址并非私有地址时返回127.0.0.1
+// 探测失败或该地址并非RFC1918私有地址时返回127.0.0.1
 func MyManIP() net.IP {
 	probed.Lock()
 	defer probed.Unlock()

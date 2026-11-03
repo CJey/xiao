@@ -10,8 +10,7 @@ import (
 	"strings"
 )
 
-// AddrCompletion convert given raw string to standardized address.
-// If the ip/port part of raw missing, will use ip and port to complete it.
+// AddrCompletion 将raw规范为ip:port，缺失的IP与端口分别以ip、port补全；只接受IP，不解析域名
 // ""                  => ip:port
 // 80, :80             => ip:80
 // 1.1.1.1, 1.1.1.1:   => 1.1.1.1:port
@@ -57,7 +56,7 @@ func AddrCompletion(raw string, ip net.IP, port uint16) (string, error) {
 	return net.JoinHostPort(rawhost, rawport), nil
 }
 
-// ResolveTCPAddr use AddrCompletion to resolve the raw as a tcp address
+// ResolveTCPAddr 经AddrCompletion补全后转为*net.TCPAddr，同样只接受IP
 func ResolveTCPAddr(raw string, ip net.IP, port uint16) (*net.TCPAddr, error) {
 	if addr, err := AddrCompletion(raw, ip, port); err != nil {
 		return nil, err
@@ -66,7 +65,7 @@ func ResolveTCPAddr(raw string, ip net.IP, port uint16) (*net.TCPAddr, error) {
 	}
 }
 
-// ResolveUDPAddr use AddrCompletion to resolve the raw as a udp address
+// ResolveUDPAddr 经AddrCompletion补全后转为*net.UDPAddr，同样只接受IP
 func ResolveUDPAddr(raw string, ip net.IP, port uint16) (*net.UDPAddr, error) {
 	if addr, err := AddrCompletion(raw, ip, port); err != nil {
 		return nil, err
@@ -75,23 +74,20 @@ func ResolveUDPAddr(raw string, ip net.IP, port uint16) (*net.UDPAddr, error) {
 	}
 }
 
-// PrettyCSVAddr 会将给定的csv格式地址去重，删除默认端口，并整合为一个csv地址返回。
+// PrettyCSVAddr 在UniqCSVAddrs的基础上省略默认端口，排序后以逗号连接
 func PrettyCSVAddr(port uint16, csvs ...string) string {
 	var addrs = TrimPort(port, UniqCSVAddrs(port, csvs...)...)
 	sort.Strings(addrs)
 	return strings.Join(addrs, ",")
 }
 
-// UniqCSVAddr 会将给定的csv格式地址去重，
-// 同时会移除非法格式的地址，最终将所有有效地址整合为一个csv地址返回。
-// 如果给定了port>0，则会对地址的端口部分执行自动补全。
+// UniqCSVAddr 同UniqCSVAddrs，结果以逗号连接
 func UniqCSVAddr(port uint16, csvs ...string) string {
 	return strings.Join(UniqCSVAddrs(port, csvs...), ",")
 }
 
-// UniqCSVAddrs 会将给定的csv格式地址去重，
-// 同时会移除非法格式的地址，最终返回地址列表。
-// 如果给定了port>0，则会对地址的端口部分执行自动补全。
+// UniqCSVAddrs 拆分逗号分隔的地址，IP与端口统一为规范写法后去重，并剔除端口非法的地址。
+// port>0时为缺端口的地址补全端口
 func UniqCSVAddrs(port uint16, csvs ...string) []string {
 	var pstr string
 	if port > 0 {
@@ -110,6 +106,9 @@ func UniqCSVAddrs(port uint16, csvs ...string) []string {
 				addr = net.JoinHostPort(addr, pstr)
 			}
 		} else if h, p, err := net.SplitHostPort(addr); err == nil {
+			if ip := net.ParseIP(h); ip != nil {
+				h = ip.String()
+			}
 			// 端口留空等同于0
 			var num uint64
 			if p != "" {
@@ -117,12 +116,13 @@ func UniqCSVAddrs(port uint16, csvs ...string) []string {
 					return
 				}
 			}
-			if num == 0 {
-				if port > 0 {
-					addr = net.JoinHostPort(h, pstr)
-				} else {
-					addr = h
-				}
+			switch {
+			case num > 0:
+				addr = net.JoinHostPort(h, strconv.FormatUint(num, 10))
+			case port > 0:
+				addr = net.JoinHostPort(h, pstr)
+			default:
+				addr = h
 			}
 		} else if port > 0 && bytes.IndexByte(baddr, ':') < 0 {
 			addr += ":" + pstr
@@ -161,12 +161,12 @@ func parseBareIP(s string) net.IP {
 	return net.ParseIP(s)
 }
 
-// TrimPort 将把给定的所有地址中端口号等于给定端口的地址，删除掉端口号，达到删除默认端口号的功能。
+// TrimPort 省略各地址中等于port的端口，无主机的地址原样保留
 func TrimPort(port uint16, addrs ...string) []string {
 	var res = make([]string, 0)
 	for i := range addrs {
 		h, p, err := net.SplitHostPort(addrs[i])
-		if err == nil {
+		if err == nil && h != "" {
 			num, err := strconv.ParseUint(p, 10, 16)
 			if err == nil && uint16(num) == port {
 				res = append(res, h)

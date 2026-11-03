@@ -1,46 +1,43 @@
 // Author: CJey Hou<cjey.hou@gmail.com>
+
+// Package xiao 提供携带名称、位置、环境变量与日志的Context，以及并发控制、序列化等常用工具
 package xiao
 
 import (
 	gcontext "context"
-	"strconv"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// 进程启动时生成，并非系统的boot_id
 var (
 	BootID   = uuid.NewString()
 	BootTime = time.Now()
 )
 
-// 基于BootID来做Session前缀
 var bootQ = SessionNameGenerator(BootID[:24])
 
-// SessionNameGenerator 返回一个命名生成器，会自动在header后面追加12位长的自增字符串，
-// 同时支持提供额外的前缀，会被附加在header之前。
+// SessionNameGenerator 返回名称生成器，名称为prefix[0]+header+自增序号，序号不足12位时补零
 func SessionNameGenerator(header string) func(...string) string {
 	var counter atomic.Uint64
 	return func(prefix ...string) string {
-		// return bootid related sequential name
-		const h = "000000000000"
-		var seq = counter.Add(1)
-		var s = strconv.FormatUint(seq, 10)
+		var name = header + fmt.Sprintf("%012d", counter.Add(1))
 		if len(prefix) > 0 {
-			return prefix[0] + header + h[:12-len(s)] + s
-		} else {
-			return header + h[:12-len(s)] + s
+			return prefix[0] + name
 		}
+		return name
 	}
 }
 
-// SessionalContext 的名称由BootID前24位与12位自增序号组成。
+// SessionalContext 的名称由prefix[0]、BootID前24位与补零至12位的自增序号依次组成
 func SessionalContext(prefix ...string) Context {
 	return NamedContext(bootQ(prefix...))
 }
 
-// ToSessionalContext 以给定的标准库Context作为内部基础对象，名称规则同SessionalContext。
+// ToSessionalContext 同SessionalContext，以gctx为内部Context
 func ToSessionalContext(gctx gcontext.Context, prefix ...string) Context {
 	return ToNamedContext(gctx, bootQ(prefix...))
 }

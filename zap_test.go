@@ -26,7 +26,12 @@ func TestReplaceLoggerConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
-// 文件路径与file://形式的URL同样自动建目录，且不在当前目录留下杂物
+func TestReplaceLoggerNil(t *testing.T) {
+	t.Cleanup(ReplaceLogger(nil))
+	NamedContext("nop").Info("dropped")
+}
+
+// 文件路径与file://形式的URL均自动创建所在目录，且当前目录下不得出现多余目录
 func TestSimpleLoggerOutpath(t *testing.T) {
 	var dir = t.TempDir()
 	t.Chdir(dir)

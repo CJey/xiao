@@ -8,33 +8,21 @@ import (
 	"go.uber.org/zap"
 )
 
-// NameJoiner will generate a full name after joining the origin and given.
-// Default logger use it to join name when invoking Fork()
+// NameJoiner 在Fork时由原名称与给定名称拼出新名称
 type NameJoiner func(origin, given string) (name string)
 
-// LocationJoiner will generate a full location after joining the origin and given.
-// Default logger use it to join location when invoking Fork()
+// LocationJoiner 在Fork时由原位置与给定位置拼出新位置，field为位置在日志中的字段名
 type LocationJoiner func(origin, given string) (field, location string)
 
-// Logger is a logger, but it has name and location.
-// When print message, it simulates zap's 'with' style,
-// encourage print message and data seprately
+// Logger 是带名称与位置的日志器，消息与数据分开传入，如Info("user created", "name", "cjey")
 type Logger interface {
-	// Fork return a new logger, with the given name and location,
-	// but it's full name and full location should inhert from me.
-	// It could just simplely join my name and location.
-	// e.g. my name = ServiceMonitor, name = go1, then new name = ServiceMonitor.go1.
-	// e.g. my location = CheckPort, location = CheckAlive, then new location = CheckPort/CheckAlive.
-	// name will be print as zap logger's name, mostly it looks like a uuid
-	// location will be print as a data field, field name is '@' mostly.
+	// Fork 派生子日志器，名称与位置分别经NameJoiner、LocationJoiner由当前值与给定值拼出。
+	// 默认以.拼接名称、以/拼接位置，给定值为空时沿用当前值；名称作为zap的logger名输出，位置默认作为字段@输出
 	Fork(name, location string) Logger
 
-	// Name return my full name
 	Name() string
-	// Location return my full location
 	Location() string
 
-	// Debug("New user created", "name", "CJey", "sex", "male")
 	Debug(msg string, kvs ...any)
 	Debugf(template string, args ...any)
 	Info(msg string, kvs ...any)
@@ -49,9 +37,8 @@ type Logger interface {
 	Fatal(msg string, kvs ...any)
 	Fatalf(template string, args ...any)
 
-	// With return a Logger with specified key/value pairs
+	// With 派生附带kvs的子日志器
 	With(kvs ...any) Logger
-	// Sync flush log buffers
 	Sync() error
 
 	// Mute 原地屏蔽Debug至Error级别的输出，Fork时继承当时的状态
@@ -74,7 +61,7 @@ type logger struct {
 
 var _ Logger = &logger{}
 
-// mostly return origin + . + given
+// defaultNameJoiner 以.拼接，任一方为空时取另一方
 func defaultNameJoiner(origin, given string) string {
 	const sep = "."
 	if given != "" {
@@ -86,7 +73,7 @@ func defaultNameJoiner(origin, given string) string {
 	return origin
 }
 
-// mostly return @, origin + / + given
+// defaultLocationJoiner 以/拼接，任一方为空时取另一方，字段名为@
 func defaultLocationJoiner(origin, given string) (string, string) {
 	const sep = "/"
 	const key = "@"
@@ -99,10 +86,7 @@ func defaultLocationJoiner(origin, given string) (string, string) {
 	return key, origin
 }
 
-// NewLogger return a Logger, with name and location.
-// name and location are optional, empty string means no name, no location.
-// z0, nj, lj are optional too, default nj is defaultNameJoiner, default lj is defaultLocationJoiner, but no default z0.
-// nj and lj will be used when Fork() invoked
+// NewLogger 的name与location可为空；z0为nil时只有Panic/Fatal生效，nj与lj为nil时采用默认的拼接方式
 func NewLogger(name, location string, z0 *zap.SugaredLogger, nj NameJoiner, lj LocationJoiner) Logger {
 	return (&logger{
 		zap0: z0,
@@ -260,7 +244,7 @@ func (l *logger) Fatalf(template string, args ...any) {
 	l.zap.Fatalf(template, args...)
 }
 
-// exitWithoutZap 未配置zap时，Fatal的消息改写stderr，免得进程无声退出
+// exitWithoutZap 未配置zap时，Fatal的消息改为写入stderr，以免进程无声退出
 func exitWithoutZap(a ...any) {
 	fmt.Fprintln(os.Stderr, a...)
 	os.Exit(1)

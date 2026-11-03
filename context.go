@@ -7,50 +7,40 @@ import (
 	"time"
 )
 
-// variable alias
 var (
 	Canceled         = gcontext.Canceled
 	DeadlineExceeded = gcontext.DeadlineExceeded
 )
 
-// type alias
 type (
 	CancelFunc = gcontext.CancelFunc
 )
 
-// Context extend default context package, make it better
-// It should has name, location, environment and logger
+// Context 在标准库Context之外附带名称、位置、环境变量与日志，每次派生都为环境变量另起一层
 type Context interface {
-	// composite
 	gcontext.Context
 
-	// Fork return a copied context, if there is a new goroutine generated
-	// it will use my name with a sequential number suffix started from 1
+	// Fork 派生子Context，名称追加从1起的自增序号，用于区分并发的子任务
 	Fork() Context
-	// At return a copied context, specify the current location where it is in,
-	// it should chain all locations start from root
+	// At 派生子Context，在当前位置之后追加location，名称不变
 	At(location string) Context
+	// ForkAt 同时执行Fork与At
 	ForkAt(location string) Context
 	// Reborn 摆脱内部Context的取消与截止时间，保留其中的value
 	Reborn() Context
-	// RebornWith will use specified context instead of internal context,
-	// it used for escaping internal context's cancel request
+	// RebornWith 以gctx替换内部Context，为nil时用Background
 	RebornWith(gcontext.Context) Context
-	// Name return my logger's name
 	Name() string
-	// Location return my logger's location
 	Location() string
 
-	// integrated base official context action
 	WithCancel() (Context, CancelFunc)
 	WithDeadline(time.Time) (Context, CancelFunc)
 	WithTimeout(time.Duration) (Context, CancelFunc)
 	WithValue(key, value any) Context
 
-	// Env return my env
-	// WARN: env value and official context value are two diffrent things
+	// Env 返回环境变量，与标准库Context的value互不相通
 	Env() Env
-	// shortcut methods of my env
+	// Env的快捷方法
 	Set(key, value any)
 	Get(key any) (value any, ok bool)
 	GetString(key any) string
@@ -62,9 +52,8 @@ type Context interface {
 	// Mute 原地屏蔽本Context的Debug至Error级日志，派生时继承当时的状态；Panic/Fatal不受影响
 	Mute()
 	Unmute()
-	// Logger return my logger
 	Logger() Logger
-	// shortcut methods of my logger
+	// Logger的快捷方法
 	Debug(msg string, kvs ...any)
 	Debugf(template string, args ...any)
 	Info(msg string, kvs ...any)
@@ -79,7 +68,7 @@ type Context interface {
 	Fatalf(template string, args ...any)
 }
 
-// ContextGenerator 定义了一个Context的生成函数，每次调用都应当返回一个新的Context
+// ContextGenerator 每次调用都应返回新的Context
 type ContextGenerator = func() Context
 
 type context struct {
@@ -92,8 +81,8 @@ type context struct {
 
 var _ Context = (*context)(nil)
 
-// NewContext use an official Context, an Env and a Logger to generate a new Context.
-// It will use default value if not given.
+// NewContext 以给定的标准库Context、Env与Logger组装Context，gctx与env为nil时取默认值；
+// log为nil时日志一律丢弃，Panic/Fatal除外
 func NewContext(gctx gcontext.Context, env Env, log Logger) Context {
 	if gctx == nil {
 		gctx = gcontext.Background()
@@ -119,35 +108,22 @@ func NewContext(gctx gcontext.Context, env Env, log Logger) Context {
 	}
 }
 
-// SimpleContext return a very simple context, without name, without location,
-// and use the global zap logger as internal logger
+// SimpleContext 返回无名称、无位置、使用全局logger的Context
 func SimpleContext() Context {
-	return NewContext(
-		gcontext.Background(),
-		NewEnv(),
-		NewLogger("", "", global.Load(), nil, nil),
-	)
+	return ToNamedContext(gcontext.Background(), "")
 }
 
-// ToSimpleContext 将给定的标准库Context对象作为Context的内部基础对象。
+// ToSimpleContext 同SimpleContext，以gctx为内部Context
 func ToSimpleContext(gctx gcontext.Context) Context {
-	return NewContext(
-		gctx,
-		NewEnv(),
-		NewLogger("", "", global.Load(), nil, nil),
-	)
+	return ToNamedContext(gctx, "")
 }
 
-// NamedContext 返回一个简单的Context，Context的名称可以通过参数name实现自定义。
+// NamedContext 同SimpleContext，名称为name
 func NamedContext(name string) Context {
-	return NewContext(
-		gcontext.Background(),
-		NewEnv(),
-		NewLogger(name, "", global.Load(), nil, nil),
-	)
+	return ToNamedContext(gcontext.Background(), name)
 }
 
-// ToNamedContext 使用给定的标准库Context和名称列表构建一个Context。
+// ToNamedContext 同NamedContext，以gctx为内部Context
 func ToNamedContext(gctx gcontext.Context, name string) Context {
 	return NewContext(
 		gctx,

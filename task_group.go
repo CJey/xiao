@@ -5,12 +5,14 @@ import (
 	"sync/atomic"
 )
 
+// TaskGroup 等待一组任务结束，并可经关联的Event向任务发出停止信号，零值可用
 type TaskGroup struct {
 	wg  sync.WaitGroup
 	cnt atomic.Int64
 	evt *Event
 }
 
+// NewTaskGroup 的evt作为停止信号，可为nil
 func NewTaskGroup(evt *Event) *TaskGroup {
 	return &TaskGroup{
 		evt: evt,
@@ -30,6 +32,7 @@ func (tg *TaskGroup) Wait() {
 	tg.wg.Wait()
 }
 
+// Count 返回尚未结束的任务数
 func (tg *TaskGroup) Count() int {
 	return int(tg.cnt.Load())
 }

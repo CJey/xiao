@@ -10,7 +10,7 @@ import (
 	"golang.org/x/term"
 )
 
-// Size 终端窗口的行数与列数
+// Size 返回终端窗口的行数与列数
 func Size(stdin *os.File) (int, int, error) {
 	var cols, rows, err = term.GetSize(int(stdin.Fd()))
 	return rows, cols, err

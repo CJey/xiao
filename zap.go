@@ -23,32 +23,27 @@ func init() {
 	}
 }
 
-// ReplaceLogger 用给定的zap.Logger替换context内部的默认全局zap.Logger和zap.SugaredLogger
+// ReplaceLogger 替换此后创建的Context所用的zap，已有的Context不受影响，nil视同zap.NewNop()；
+// 返回的函数用于恢复替换前的logger
 func ReplaceLogger(logger *zap.Logger) func() {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	var prev = global.Swap(logger.Sugar())
 	return func() { ReplaceLogger(prev.Desugar()) }
 }
 
-// UseDefaultLogger 使用预定义的简单zap.Logger替换全局默认zap.Logger。
+// UseDefaultLogger 采用默认的全局logger：info级别、console格式、输出到stderr，返回值同ReplaceLogger
 func UseDefaultLogger() (func(), error) {
-	var logger, err = NewSimpleLogger("info", "stderr", "console", false)
-	if err != nil {
-		return nil, err
-	}
-	return ReplaceLogger(logger), nil
+	return UseSimpleLogger("info", "stderr", "console", false)
 }
 
-// UseDevelopLogger 使用预定义的简单zap.Logger替换全局默认zap.Logger，适合于开发、测试、写简单的工具时用。
-// 日志写入当前目录下名为log的文件。
+// UseDevelopLogger 以debug级别将日志写入当前目录下名为log的文件，适用于开发、测试与简单工具，返回值同ReplaceLogger
 func UseDevelopLogger() (func(), error) {
-	var logger, err = NewSimpleLogger("debug", "log", "console", false)
-	if err != nil {
-		return nil, err
-	}
-	return ReplaceLogger(logger), nil
+	return UseSimpleLogger("debug", "log", "console", false)
 }
 
-// UseSimpleLogger 使用简单的默认风格logger替换掉全局的zap.Logger
+// UseSimpleLogger 以NewSimpleLogger创建的logger替换全局logger，返回值同ReplaceLogger
 func UseSimpleLogger(level, outpath, encoding string, disableCaller bool) (func(), error) {
 	var logger, err = NewSimpleLogger(level, outpath, encoding, disableCaller)
 	if err != nil {
@@ -57,7 +52,7 @@ func UseSimpleLogger(level, outpath, encoding string, disableCaller bool) (func(
 	return ReplaceLogger(logger), nil
 }
 
-// NewSimpleLogger 生成并返回一个简单的默认风格的zap.Logger
+// NewSimpleLogger 按本库的默认风格创建zap.Logger，outpath为文件路径或file://地址时自动创建所在目录
 func NewSimpleLogger(level, outpath, encoding string, disableCaller bool) (*zap.Logger, error) {
 	var zlevel zapcore.Level
 	switch strings.ToLower(level) {
@@ -74,7 +69,7 @@ func NewSimpleLogger(level, outpath, encoding string, disableCaller bool) (*zap.
 	case "fatal":
 		zlevel = zap.FatalLevel
 	default:
-		return nil, errors.New("Unexpected log level " + level)
+		return nil, errors.New("unexpected log level " + level)
 	}
 
 	if dir := filepath.Dir(sinkFilePath(outpath)); dir != "." && dir != ".." && dir != "/" {
@@ -117,7 +112,7 @@ func NewSimpleLogger(level, outpath, encoding string, disableCaller bool) (*zap.
 		},
 
 		OutputPaths:      []string{outpath},
-		ErrorOutputPaths: nil, // only zap internal error
+		ErrorOutputPaths: nil, // zap自身的内部错误，置空即丢弃
 		InitialFields:    nil,
 	}
 	return zcfg.Build()

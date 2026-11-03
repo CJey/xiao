@@ -7,14 +7,17 @@ import (
 	"time"
 )
 
+// 探测结果因环境而异，只断言取值范围
 func TestMyManIP(t *testing.T) {
-	var ip = MyManIP()
-	t.Log("Man ip got: " + ip.String())
+	if ip := MyManIP(); !ip.IsPrivate() && !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Errorf("MyManIP = %s", ip)
+	}
 }
 
 func TestMyWanIP(t *testing.T) {
-	var ip = MyWanIP()
-	t.Log("Wan ip got: " + ip.String())
+	if ip := MyWanIP(); !IsPublicIPv4(ip) && !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Errorf("MyWanIP = %s", ip)
+	}
 }
 
 func TestMyManIPCache(t *testing.T) {

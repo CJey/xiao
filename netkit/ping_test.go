@@ -81,10 +81,21 @@ func TestPingTimeout(t *testing.T) {
 		t.Error("TCPing with negative timeout should fail")
 	}
 
-	if _, err := ICMPing("127.0.0.1", 0); errors.Is(err, os.ErrPermission) {
-		t.Skipf("gid is out of net.ipv4.ping_group_range, %v", err)
-	} else if err != nil {
-		t.Errorf("ICMPing without timeout: %v", err)
+	// ICMP回显被丢弃时不限时的ICMPing永不返回，故由测试自行限时
+	var done = make(chan error, 1)
+	go func() {
+		var _, err = ICMPing("127.0.0.1", 0)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if errors.Is(err, os.ErrPermission) {
+			t.Skipf("gid is out of net.ipv4.ping_group_range, %v", err)
+		} else if err != nil {
+			t.Errorf("ICMPing without timeout: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ICMPing without timeout blocked")
 	}
 	if _, err := ICMPing("127.0.0.1", -1); err == nil {
 		t.Error("ICMPing with negative timeout should fail")

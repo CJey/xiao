@@ -8,7 +8,7 @@ import (
 	"github.com/goccy/go-json"
 )
 
-// 日志里须原样嵌入json，不能被转义成字符串
+// 日志中须原样嵌入json，不得被转义为字符串
 func TestRawJsonInLog(t *testing.T) {
 	var buf = captureLogger(t)
 	NamedContext("json").Info("msg", "data", Json(map[string]int{"a": 1}))

@@ -72,20 +72,22 @@ func TestGRPCStatusPassthrough(t *testing.T) {
 // 经真实的grpc往返，handler以各种形式返回错误
 func TestOverGrpc(t *testing.T) {
 	var errs = map[string]error{
-		"direct":  New(typepb.Field_TYPE_STRING, "direct"),
-		"wrapped": fmt.Errorf("wrap: %w", New(typepb.Field_TYPE_INT32, "wrapped")),
-		"encoded": Encode(typepb.Field_TYPE_BOOL, "encoded"),
-		"badutf8": New(typepb.Field_TYPE_BYTES, "bad %s", "\xff\xfe"),
-		"grpc":    &GError{Code: -int32(codes.Unavailable), Name: codes.Unavailable.String(), Message: "down"},
-		"plain":   errors.New("plain"),
+		"direct":   New(typepb.Field_TYPE_STRING, "direct"),
+		"wrapped":  fmt.Errorf("wrap: %w", New(typepb.Field_TYPE_INT32, "wrapped")),
+		"encoded":  Encode(typepb.Field_TYPE_BOOL, "encoded"),
+		"badutf8":  New(typepb.Field_TYPE_BYTES, "bad %s", "\xff\xfe"),
+		"grpc":     &GError{Code: -int32(codes.Unavailable), Name: codes.Unavailable.String(), Message: "down"},
+		"plain":    errors.New("plain"),
+		"typednil": (*GError)(nil),
 	}
 	var checks = map[string]func(*GError) bool{
-		"direct":  func(g *GError) bool { return g.Equal(typepb.Field_TYPE_STRING) },
-		"wrapped": func(g *GError) bool { return g.Equal(typepb.Field_TYPE_INT32) },
-		"encoded": func(g *GError) bool { return g.Equal(typepb.Field_TYPE_BOOL) },
-		"badutf8": func(g *GError) bool { return g.Equal(typepb.Field_TYPE_BYTES) },
-		"grpc":    func(g *GError) bool { return g.IsGrpcUnavailable() && g.Message == "down" },
-		"plain":   func(g *GError) bool { return g.IsGrpcUnknown() && g.Message == "plain" },
+		"direct":   func(g *GError) bool { return g.Equal(typepb.Field_TYPE_STRING) },
+		"wrapped":  func(g *GError) bool { return g.Equal(typepb.Field_TYPE_INT32) },
+		"encoded":  func(g *GError) bool { return g.Equal(typepb.Field_TYPE_BOOL) },
+		"badutf8":  func(g *GError) bool { return g.Equal(typepb.Field_TYPE_BYTES) },
+		"grpc":     func(g *GError) bool { return g.IsGrpcUnavailable() && g.Message == "down" },
+		"plain":    func(g *GError) bool { return g.IsGrpcUnknown() && g.Message == "plain" },
+		"typednil": func(g *GError) bool { return g.IsGrpcUnknown() && g.Message == "<nil>" },
 	}
 
 	var lis = bufconn.Listen(1 << 20)

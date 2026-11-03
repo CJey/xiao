@@ -18,7 +18,7 @@ func TestLimitGroupGoPanic(t *testing.T) {
 	expectPanicExit(t)
 }
 
-// 多调一次Done同sync.WaitGroup一样panic，而不是卡死
+// 多调用一次Done须同sync.WaitGroup一样panic，而非永久阻塞
 func TestLimitGroupExtraDone(t *testing.T) {
 	var recovered = make(chan any, 1)
 	go func() {
@@ -63,7 +63,7 @@ func TestLimitGroup(t *testing.T) {
 	}
 }
 
-// 两个申请者同时各要全部配额，不得各占一部分而互相等待
+// 两个申请者同时各申请全部配额，不得各占一部分而互相等待
 func TestLimitGroupMultiAdd(t *testing.T) {
 	var lg = NewLimitGroup(2)
 	var finished = make(chan struct{})

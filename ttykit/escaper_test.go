@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// 只认行首的~.；~~送出一个~，~后跟别的照原样送出；跨两次读也认得
+// 仅识别行首的~.；~~送出单个~，~后接其他字符时原样送出；跨两次读取同样识别
 func TestEscaper(t *testing.T) {
 	for _, c := range []struct {
 		reads []string

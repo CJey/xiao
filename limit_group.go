@@ -64,7 +64,7 @@ func NewLimitGroupGrace() LimitGroup {
 }
 
 type limitGroup struct {
-	mu sync.Mutex // 串行化一次占用多个配额的Add，免得多个申请者各占一部分后互相等待
+	mu sync.Mutex // 串行化一次占用多个配额的Add，以免多个申请者各占一部分后互相等待
 	wg sync.WaitGroup
 	ch chan struct{}
 }
@@ -76,7 +76,7 @@ func (lg *limitGroup) Max() uint {
 func (lg *limitGroup) Add(tasks int) {
 	if tasks > 0 {
 		if tasks > cap(lg.ch) {
-			panic(fmt.Errorf("LimitGroup: tasks[%d] do greater than max[%d]", tasks, cap(lg.ch)))
+			panic(fmt.Errorf("LimitGroup: Add(%d) exceeds max[%d]", tasks, cap(lg.ch)))
 		}
 		lg.wg.Add(tasks)
 		if tasks > 1 {
@@ -88,9 +88,9 @@ func (lg *limitGroup) Add(tasks int) {
 		}
 	} else if tasks < 0 {
 		if -tasks > cap(lg.ch) {
-			panic(fmt.Errorf("LimitGroup: tasks[%d] done greater than max[%d]", -tasks, cap(lg.ch)))
+			panic(fmt.Errorf("LimitGroup: Add(%d) exceeds max[%d]", tasks, cap(lg.ch)))
 		}
-		// 先减计数：释放多于占用时同sync.WaitGroup一样panic，而不是卡在等配额上
+		// 先减计数：释放多于占用时同sync.WaitGroup一样panic，不致因无配额可释放而阻塞
 		lg.wg.Add(tasks)
 		for i := tasks; i < 0; i++ {
 			<-lg.ch
@@ -110,7 +110,7 @@ func (lg *limitGroup) Go(fn func()) {
 	lg.Add(1)
 	go func() {
 		defer func() {
-			// 同sync.WaitGroup.Go：fn panic时不释放，免得Wait就此返回，赶在崩溃之前退出进程
+			// 同sync.WaitGroup.Go：fn panic时不释放，以免Wait提前返回，使进程先于崩溃正常退出
 			if x := recover(); x != nil {
 				panic(x)
 			}

@@ -4,16 +4,15 @@ import (
 	"sync"
 )
 
-// Event 提供一个简单的一次性事件订阅和管理功能，零值可用
+// Event 一次性事件，零值可用
 type Event struct {
 	once sync.Once
 	mu   sync.Mutex
-	done chan struct{} // Emit触发事件后，会关闭此chan，实现事件通知效果
+	done chan struct{}
 
-	Args []any // 触发事件时提供的关联数据
+	Args []any // Emit时传入的关联数据，须待事件触发后读取
 }
 
-// NewEvent 初始化并返回一个*Event
 func NewEvent() *Event {
 	return new(Event)
 }
@@ -23,11 +22,12 @@ func (evt *Event) ch() chan struct{} {
 	return evt.done
 }
 
+// Yes 返回事件触发时关闭的chan
 func (evt *Event) Yes() <-chan struct{} {
 	return evt.ch()
 }
 
-// 用于触发事件，支持提供可选的关联数据，只在首次触发时返回true
+// Emit 触发事件并记下args，仅首次调用生效并返回true
 func (evt *Event) Emit(args ...any) bool {
 	var done = evt.ch()
 	evt.mu.Lock()
@@ -42,7 +42,7 @@ func (evt *Event) Emit(args ...any) bool {
 	}
 }
 
-// 事件是否已经结束
+// Done 报告事件是否已触发
 func (evt *Event) Done() bool {
 	select {
 	case <-evt.ch():

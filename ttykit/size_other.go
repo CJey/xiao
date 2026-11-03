@@ -9,10 +9,10 @@ import (
 	"golang.org/x/term"
 )
 
-// 没有SIGWINCH，只能轮询
+// 无SIGWINCH可用，只能轮询
 const resizePoll = 500 * time.Millisecond
 
-// Size 终端窗口的行数与列数。控制台的窗口大小要经输出句柄取，stdin的句柄取不到
+// Size 返回终端窗口的行数与列数；控制台的窗口尺寸只能经输出句柄获取，经stdin句柄无法取得
 func Size(_ *os.File) (int, int, error) {
 	var cols, rows, err = term.GetSize(int(os.Stdout.Fd()))
 	return rows, cols, err

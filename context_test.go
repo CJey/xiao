@@ -39,7 +39,7 @@ func TestSessionalContext(t *testing.T) {
 	var ctx12 = ctx1.Fork()
 	var session = "7ec17674-1360-4fb1-9245-bd8d8d5866c4"
 	SetSession(ctx12, session)
-	ctx12.Warn("Fork test 1.2", "name", ctx12.Name(), "cutomized session", GetSession(ctx12))
+	ctx12.Warn("Fork test 1.2", "name", ctx12.Name(), "customized session", GetSession(ctx12))
 	var ctx13 = ctx1.Fork()
 	ctx13.Warn("Fork test 1.3", "name", ctx13.Name(), "session", GetSession(ctx13))
 	if ctx11.Name() != ctx1.Name()+".1" || ctx11.GetString("abc") != "xyz" || GetRealSession(ctx11) != "" {
@@ -98,5 +98,12 @@ func TestReborn(t *testing.T) {
 	cancel()
 	if reborn.Err() != nil || reborn.Value(key{}) != "v" || reborn.Name() != "reborn" {
 		t.Errorf("err = %v, value = %v, name = %q", reborn.Err(), reborn.Value(key{}), reborn.Name())
+	}
+}
+
+func TestSessionNameGenerator(t *testing.T) {
+	var gen = SessionNameGenerator("h-")
+	if a, b := gen(), gen("p-"); a != "h-000000000001" || b != "p-h-000000000002" {
+		t.Errorf("names = %q, %q", a, b)
 	}
 }

@@ -24,11 +24,12 @@ const (
 	_FIELD_NAME_MESSAGE = "message"
 )
 
-// Encode encodes the code and msg and send to client
+// Encode 以New创建业务错误并编码为grpc错误
 func Encode(code protoreflect.Enum, format string, a ...any) error {
 	return New(code, format, a...).Encode()
 }
 
+// Encode 编码为grpc错误，成功时返回nil
 func (e *GError) Encode() error {
 	return e.GRPCStatus().Err()
 }
@@ -63,7 +64,7 @@ func (e *GError) GRPCStatus() *status.Status {
 	return sts
 }
 
-// Decode decodes error returned by server to *GError
+// Decode 将grpc调用返回的错误还原为*GError：nil为成功，非本包编码的错误按grpc状态码还原
 func Decode(err error) *GError {
 	if err == nil {
 		return &GError{Code: CODE_OK, Name: "OK"}
@@ -77,16 +78,16 @@ func Decode(err error) *GError {
 
 	sts := status.Convert(err)
 	if sts.Code() == codes.OK {
-		// OK always without message
+		// 成功时不带消息
 		return &GError{Code: CODE_OK, Name: "OK"}
 	}
-	// 包装过的错误经status.FromError后message会被换成包装后的全文，业务错误只认details
+	// 包装过的错误经status.FromError后message会被换成包装后的全文，业务错误仅以details为准
 	if sts.Code() == codes.Unknown {
 		if e := fromDetails(sts.Details()); e != nil {
 			return e
 		}
 	}
-	// must be grpc error, convert code to negative
+	// 其余均为grpc错误，状态码取反存放
 	return &GError{
 		Code:    -1 * int32(sts.Code()),
 		Name:    sts.Code().String(),

@@ -2,12 +2,12 @@ package xiao
 
 type keySession struct{}
 
-// SetSession use to set real session name
+// SetSession 设置会话名，存于Env，由派生的Context继承
 func SetSession(ctx Context, session string) {
 	ctx.Set(keySession{}, session)
 }
 
-// GetSession use to get session name if it has real session, otherwise return context name instead
+// GetSession 返回会话名，未设置时以Context的名称代替
 func GetSession(ctx Context) string {
 	if val, ok := ctx.Get(keySession{}); ok {
 		if session := val.(string); session != "" {
@@ -17,7 +17,7 @@ func GetSession(ctx Context) string {
 	return ctx.Name()
 }
 
-// GetRealSession use to get real session name
+// GetRealSession 返回经SetSession设置的会话名，未设置时为空
 func GetRealSession(ctx Context) string {
 	return ctx.GetString(keySession{})
 }

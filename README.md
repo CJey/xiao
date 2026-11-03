@@ -10,43 +10,43 @@ import "github.com/cjey/xiao"
 
 ## Context
 
-Context在实现了官方的Context接口外，额外追加了环境变量和日志能力
+Context在实现标准库Context接口的基础上，附带了环境变量与日志能力。
 
 ### 关键特性
 
 **兼容**
 
-实现了官方库的Context接口
+实现了标准库的Context接口，可用于任何接受context.Context的场合。
 
 **WithX**
 
-一组操作，用于直接简单的执行Context派生
+即WithCancel、WithDeadline、WithTimeout与WithValue，用于便捷地派生Context。
 
 **Fork**
 
-Context支持执行fork操作，将会copy当前的环境，生成新的子级环境，同时其name后会自动的被追加一个数字后缀(location保持)
+派生出新的一层环境变量，并在名称之后追加自增的数字后缀，位置保持不变。
 
-一般使用场景：一次请求当中，需要开启并发操作，并发的任务当中使用fork的Context来执行操作，这样在日志输出上就可以简单的区分出子任务
+典型场景：一次请求中需要并发执行多个子任务时，各子任务使用Fork得到的Context，日志中即可据名称区分各子任务。
 
-如果本请求触发了一个异步任务，则需要谨慎对待，因为派生Context用于异步可能会存在副作用（常规现象，继承的Context很可能会在同步请求结束时被立即Cancel），解决的办法可以是根据情况创建一个新的NamedContext，手工继承源Context的Name和Location(按需)
+派生的Context用于异步任务时须谨慎：源Context通常在同步请求结束时即被取消，异步任务会随之中断。此时应改用Reborn派生，它摆脱源Context的取消与截止时间，同时保留名称、位置、环境变量与value。
 
 **At**
 
-此操作将会copy当前的环境，生成新的子级环境，同时会在原有的Location之上合并入一个新的location名称(name保持)，Context支持在新的逻辑过程中自行指明一个位置名称，在日志输出时便会自动带上该位置，并且，此位置名称是会被继承的，这样在输出日志中便可以简单的查看到一定的逻辑调用层次关系
+派生出新的一层环境变量，并在原有位置之后追加新的位置名称，名称保持不变。位置随派生逐级继承，并在日志输出时自动携带，从而在日志中呈现逻辑上的调用层次。
 
-当然，这个是可选的，也不建议在大大小小所有的函数位置处使用此能力，否则跟每条日志都打印一次调用堆栈没了区别，应当根据情况用在合适的位置
+此能力宜用在关键的逻辑节点上，不建议在每个函数中使用，否则与每条日志都打印一次调用栈无异。
 
 **Set/Get**
 
-这是一组快捷操作，等价于调用Context内的Env，用于提供类似环境变量的能力，每当有新的Context派生出来之时，即会同步派生出新的变量空间
+Env的快捷方法，提供类似环境变量的能力。每次派生Context，都会同步派生出新的一层变量空间。
 
-Set操作将只针对自己当前的变量空间，不会影响上游空间，而Get操作则会优先访问当前的变量空间，如果没有找到，则会逐级向上游追溯
+Set只写入当前层，不影响上层；Get优先查找当前层，未找到时逐级向上层查找。
 
 **Debug/Info/...**
 
-这是一组快捷操作，等价于调用Context内的Logger，用于提供基本的日志操作，内部的logger选择了zap.SugaredLogger，日志格式也默认被重新调整过，如果想定制格式，可以直接自行执行全局替换
+Logger的快捷方法，提供基本的日志能力。内部使用zap.SugaredLogger，日志格式经过重新调整；如需自定义格式，可自行替换全局logger。
 
-如果只是想要在默认风格上调整日志等级/日志文件/日志编码等配置，可以直接使用UseSimpleLogger完成目标，已有现成的zap.Logger时则用ReplaceLogger
+只需在默认风格上调整日志级别、输出位置或编码时，使用UseSimpleLogger即可；已有现成的zap.Logger时，则使用ReplaceLogger。替换只影响此后创建的Context。
 
 默认：UseSimpleLogger("info", "stderr", "console", false)
 
@@ -54,70 +54,70 @@ info+json：UseSimpleLogger("info", "stderr", "json", false)
 
 **Mute/Unmute**
 
-原地屏蔽或恢复当前Context的Debug至Error级日志，适合高频请求按需静默，派生出的Context继承派生时的状态。Panic/Fatal不受影响，照常输出并终止
+原地屏蔽或恢复当前Context的Debug至Error级日志，适用于高频请求按需静默；派生出的Context继承派生时的状态。Panic/Fatal不受影响，照常输出并终止。
 
 ### NamedContext
 
-Context可以支持自命名，一般用于伴随服务生命周期的任务，或者是定时执行类的任务
+Context支持自定义名称，一般用于伴随服务生命周期的任务，或定时执行的任务。
 
-对于这样的用法，需要注意的是，Context创建时，其内部的logger已经固定，比如定时执行类的任务，如果在运行时需要动态调整logger，应当在每次执行时重新创建一个同名的Context
+须注意，Context创建时其内部的logger即已固定。对于定时任务，如需在运行时调整logger，应在每次执行时重新创建同名的Context。
 
 ```go
 var ctx = xiao.NamedContext("ZookeeperMonitor")
 ctx.Info("started")
 // console encode
-// 2020-04-11 21:24:45.361  info    ZookeeperMonitor started
+// 2020-04-11 21:24:45.361  info    ZookeeperMonitor  app/main.go:12  started
 // json encode
-// {"L":"info","T":"2020-04-11 21:24:45.361","N":"ZookeeperMonitor","M":"started"}
+// {"L":"info","T":"2020-04-11 21:24:45.361","N":"ZookeeperMonitor","C":"app/main.go:12","M":"started"}
 
 ctx = ctx.At("GetID")
 ctx.Set("id", "123")
 ctx.Info("got it!", "id", ctx.GetString("id"))
 // console encode
-// 2020-04-11 21:24:45.361  info    ZookeeperMonitor got it! {"@": "GetID", "id": "123"}
+// 2020-04-11 21:24:45.361  info    ZookeeperMonitor  app/main.go:16  got it!  {"@": "GetID", "id": "123"}
 // json encode
-// {"L":"info","T":"2020-04-11 21:24:45.361","N":"ZookeeperMonitor","M":"got it!", "@": "GetID", "id": "123"}
+// {"L":"info","T":"2020-04-11 21:24:45.361","N":"ZookeeperMonitor","C":"app/main.go:16","M":"got it!","@":"GetID","id":"123"}
 ```
 
 ### SessionalContext
 
-还可以选择使用自动生成uuid风格名称的Context，适用于服务请求开始时，为本次请求创建一个SessionalContext。
+也可以使用自动生成uuid风格名称的Context，适用于在请求开始时为本次请求创建一个SessionalContext。
 
-生成的Context的name即是一个带有一定规律的uuid（以BootID的前24位为前缀+12位10进制数字递增序列）
+生成的名称形似uuid，由BootID的前24位与12位十进制自增序号组成。
 
-如需定制命名规则，可用SessionNameGenerator创建自己的生成器，再交给NamedContext使用
+如需定制命名规则，可用SessionNameGenerator创建自己的生成器，再交由NamedContext使用。
 
 ```go
 var ctx = xiao.SessionalContext()
 ctx.Info("started")
 // console encode
-// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001 started
+// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001  app/main.go:12  started
 // json encode
-// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001","M":"started"}
+// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001","C":"app/main.go:12","M":"started"}
 
 ctx = ctx.ForkAt("AsyncGetID")
 ctx.Info("show default session", "session", xiao.GetSession(ctx))
 // console encode
-// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1 show default session {"@": "AsyncGetID", "session": "9b2119d3-7f37-4033-8c19-000000000001.1"}
+// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1  app/main.go:15  show default session  {"@": "AsyncGetID", "session": "9b2119d3-7f37-4033-8c19-000000000001.1"}
 // json encode
-// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001.1","M":"show default session", "@": "AsyncGetID", "session": "9b2119d3-7f37-4033-8c19-000000000001.1"}
+// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001.1","C":"app/main.go:15","M":"show default session","@":"AsyncGetID","session":"9b2119d3-7f37-4033-8c19-000000000001.1"}
 
 xiao.SetSession(ctx, "7ec17674-1360-4fb1-9245-bd8d8d5866c4")
 ctx.Info("use my own session", "session", xiao.GetSession(ctx))
 // console encode
-// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1 use my own session {"@": "AsyncGetID", "session": "7ec17674-1360-4fb1-9245-bd8d8d5866c4"}
+// 2020-04-11 21:24:45.361  info    9b2119d3-7f37-4033-8c19-000000000001.1  app/main.go:19  use my own session  {"@": "AsyncGetID", "session": "7ec17674-1360-4fb1-9245-bd8d8d5866c4"}
 // json encode
-// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001.1","M":"use my own session", "@": "AsyncGetID", "session": "7ec17674-1360-4fb1-9245-bd8d8d5866c4"}
+// {"L":"info","T":"2020-04-11 21:24:45.361","N":"9b2119d3-7f37-4033-8c19-000000000001.1","C":"app/main.go:19","M":"use my own session","@":"AsyncGetID","session":"7ec17674-1360-4fb1-9245-bd8d8d5866c4"}
 ```
 
 ### ToContext
 
-NamedContext和SessionalContext都使用官方context的Background作为内部context，如果需要使用自定义的context或者将官方的context执行转换，则可以使用**ToSessionalContext**和**ToNamedContext**
+NamedContext与SessionalContext均以标准库的Background作为内部Context。如需使用自定义的Context，或转换标准库的Context，可使用**ToSessionalContext**与**ToNamedContext**。
 
 ## 其他
 
 - **Event / TaskGroup / LimitGroup**：一次性事件通知、带停止信号的任务组、并发配额限制
 - **Json / RawJson / JsonPretty / Gzip / Gunzip**：常用的序列化与压缩工具，`Json`的结果可直接作为日志字段输出
-- **gerror**：把业务错误码编进grpc的带外错误，handler可直接返回`*GError`，调用方以`Decode`还原
+- **gerror**：将业务错误码编入grpc的带外错误，handler可直接返回`*GError`，调用方以`Decode`还原
 - **netkit**：地址补全与去重、本机管理网与公网地址探测、TCPing与ICMPing
-- **ttykit**：把本地终端接到远端的交互式会话，同`ssh -t`
+- **ttykit**：将本地终端接入远端的交互式会话，同`ssh -t`

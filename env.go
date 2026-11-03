@@ -7,18 +7,16 @@ import (
 	"time"
 )
 
-// Env should used as a map, but it has an inherited mode, overlay liked.
-// If you set, the value should be store at local.
-// If you get, the value should be get from local first, otherwise from parent
+// Env 是分层的键值存储，Fork派生的下层可遮盖上层的同名键
 type Env interface {
-	// Fork return an inherited sub Env, and I am it's parent
 	Fork() Env
 
-	// Set always set key & value at local storage
+	// Set 只写本层，key为nil或不可比较时panic
 	Set(key, value any)
-	// Get always check local, if the key not exists, then check parent
+	// Get 先查本层，未命中再逐级查上层；上层在派生之后写入的值同样可见
 	Get(key any) (value any, ok bool)
 	Has(key any) (ok bool)
+	// Keys 返回本层及各上层的全部键
 	Keys() []any
 
 	// GetXxx 键不存在或值为nil时返回零值，类型不符时panic
@@ -43,7 +41,6 @@ type env struct {
 
 var _ Env = &env{}
 
-// NewEnv return a simple Env, use sync.Map as it's storage
 func NewEnv() Env {
 	return &env{}
 }
@@ -69,11 +66,9 @@ func (e *env) Set(key, value any) {
 }
 
 func (e *env) Get(key any) (value any, ok bool) {
-	// from local
 	if value, ok := e.vals.Load(key); ok {
 		return value, ok
 	}
-	// otherwise from parent
 	if e.parent != nil {
 		return e.parent.Get(key)
 	}

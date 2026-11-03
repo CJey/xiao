@@ -28,6 +28,7 @@ func (r *RawJson) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Json 将msg序列化为可原样嵌入日志的RawJson；[]byte视为已编码的json，序列化失败时为null
 func Json(msg any) RawJson {
 	if raw, yes := msg.([]byte); yes {
 		return RawJson(raw)
@@ -36,6 +37,7 @@ func Json(msg any) RawJson {
 	return RawJson(js)
 }
 
+// JsonPretty 返回缩进后的json，[]byte与string视为已编码的json，无法解析时原样返回；prefix[0]为首行之外各行的前缀
 func JsonPretty(msg any, prefix ...string) string {
 	pre := ""
 	if len(prefix) > 0 {

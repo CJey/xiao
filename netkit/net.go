@@ -6,7 +6,6 @@ import (
 	"slices"
 )
 
-// 私有地址：回环、RFC1918、CGNAT与链路本地
 var privateIPv4 = []netip.Prefix{
 	netip.MustParsePrefix("127.0.0.0/8"),
 	netip.MustParsePrefix("10.0.0.0/8"),
@@ -29,11 +28,13 @@ var specialIPv4 = []netip.Prefix{
 	netip.MustParsePrefix("240.0.0.0/4"),
 }
 
+// IsPrivateIPv4 所指私有地址含回环、RFC1918、CGNAT与链路本地，范围宽于net.IP.IsPrivate
 func IsPrivateIPv4(ip net.IP) bool {
 	var addr, ok = addrOf4(ip)
 	return ok && contains(privateIPv4, addr)
 }
 
+// IsPublicIPv4 判断是否为可公网路由的IPv4地址，私有地址与IANA特殊用途地址均不计入
 func IsPublicIPv4(ip net.IP) bool {
 	var addr, ok = addrOf4(ip)
 	return ok && !contains(privateIPv4, addr) && !contains(specialIPv4, addr)
